@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TEN Capital Network — Deck Analyzer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Upload a pitch deck and get a one-page investor review PDF.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-950: #0B1526;
+    --navy-900: #101E33;
+    --navy-800: #16283F;
+    --navy-700: #1E354F;
+    --coral: #EE5A4E;
+    --coral-soft: #F0776C;
+    --amber: #F3A22A;
+    --teal: #35BEBB;
+    --ink-100: #F3F6FA;
+    --ink-300: #C4D0E0;
+    --ink-500: #7E90A8;
+    --ink-600: #5C6E86;
+
+    --font-display: 'Sora', 'Segoe UI', system-ui, sans-serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0;
+    padding:0;
+    background: var(--navy-950);
+    color: var(--ink-100);
+    font-family: var(--font-body);
+    min-height: 100vh;
+  }
+
+  body{
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding: 48px 20px 64px;
+    position:relative;
+    overflow-x:hidden;
+  }
+
+  /* ambient tri-color glow, echoing the logo's three figures */
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    background:
+      radial-gradient(480px 380px at 14% 8%, rgba(238,90,78,0.16), transparent 60%),
+      radial-gradient(480px 380px at 86% 6%, rgba(243,162,42,0.13), transparent 60%),
+      radial-gradient(560px 420px at 50% 100%, rgba(53,190,187,0.14), transparent 60%);
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .stage{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width: 620px;
+    transition: max-width .35s ease;
+  }
+  .stage.wide{ max-width: 880px; }
+
+  /* brand lockup */
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom: 28px;
+    padding-left: 4px;
+  }
+  .brand-mark{ width:34px; height:34px; flex-shrink:0; }
+  .brand-word{
+    font-family: var(--font-display);
+    font-weight:800;
+    font-size:15px;
+    letter-spacing:0.04em;
+    line-height:1.15;
+    color: var(--ink-100);
+    text-transform:uppercase;
+  }
+  .brand-word span{
+    display:block;
+    font-weight:600;
+    font-size:10px;
+    letter-spacing:0.22em;
+    color: var(--ink-500);
+    margin-top:2px;
+  }
+
+  .card{
+    background: linear-gradient(180deg, var(--navy-900) 0%, var(--navy-800) 100%);
+    border: 1px solid var(--navy-700);
+    border-radius: 20px;
+    padding: 44px 44px 36px;
+    box-shadow:
+      0 30px 60px -20px rgba(0,0,0,0.55),
+      inset 0 1px 0 rgba(255,255,255,0.03);
+    position:relative;
+    overflow:hidden;
+  }
+  .card + .card{ margin-top: 20px; }
+  .card::after{
+    content:"";
+    position:absolute;
+    top:-2px; left:44px; right:44px;
+    height:2px;
+    background: linear-gradient(90deg, var(--coral), var(--amber), var(--teal));
+    border-radius: 2px;
+  }
+
+  .eyebrow{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family: var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color: var(--teal);
+    margin-bottom:14px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:6px; height:6px;
+    border-radius:50%;
+    background: var(--teal);
+    box-shadow: 0 0 0 3px rgba(53,190,187,0.18);
+  }
+  .eyebrow.is-live::before{ animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse{
+    0%,100%{ box-shadow: 0 0 0 3px rgba(53,190,187,0.18); }
+    50%{ box-shadow: 0 0 0 7px rgba(53,190,187,0.04); }
+  }
+
+  h1{
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight:700;
+    line-height:1.25;
+    margin: 0 0 12px;
+    letter-spacing:-0.01em;
+  }
+  h1 .arrow{ color: var(--ink-500); font-weight:400; margin: 0 4px; }
+  h1 .to{
+    background: linear-gradient(90deg, var(--coral-soft), var(--amber));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .lede{
+    color: var(--ink-300);
+    font-size:15px;
+    line-height:1.6;
+    margin: 0 0 32px;
+    max-width: 48ch;
+  }
+
+  /* dropzone ---------------------------------------------------------- */
+  .dropzone{
+    display:block;
+    border: 1.5px dashed var(--navy-700);
+    border-radius: 14px;
+    padding: 38px 24px;
+    text-align:center;
+    cursor:pointer;
+    background: rgba(255,255,255,0.015);
+    transition: border-color .18s ease, background .18s ease, transform .18s ease;
+  }
+  .dropzone:hover, .dropzone:focus-visible{
+    border-color: var(--teal);
+    background: rgba(53,190,187,0.05);
+    outline:none;
+  }
+  .dropzone.is-over{
+    border-color: var(--teal);
+    background: rgba(53,190,187,0.09);
+  }
+  .dropzone.has-file{
+    border-style: solid;
+    border-color: var(--teal);
+    background: rgba(53,190,187,0.06);
+  }
+  .dropzone:active{ transform: scale(0.997); }
+
+  .dropzone-icon{
+    width:38px; height:38px;
+    margin: 0 auto 14px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(238,90,78,0.16), rgba(243,162,42,0.16));
+    border: 1px solid var(--navy-700);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .dropzone-icon svg{ width:18px; height:18px; }
+  .dropzone-title{ font-size:15px; font-weight:600; color: var(--ink-100); margin-bottom:6px; }
+  .dropzone-sub{
+    font-family: var(--font-mono);
+    font-size:11.5px;
+    color: var(--ink-500);
+    letter-spacing:0.01em;
+  }
+  .dropzone-sub b{ color: var(--ink-300); font-weight:500; }
+  .file-input{ display:none; }
+
+  /* access code -------------------------------------------------------- */
+  .field{ margin-top: 18px; }
+  .field label{
+    display:block;
+    font-family: var(--font-mono);
+    font-size:10.5px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color: var(--ink-500);
+    margin-bottom:7px;
+  }
+  .field input{
+    width:100%;
+    padding: 13px 15px;
+    border-radius: 11px;
+    border: 1px solid var(--navy-700);
+    background: var(--navy-950);
+    color: var(--ink-100);
+    font-family: var(--font-mono);
+    font-size:13.5px;
+    letter-spacing:0.05em;
+  }
+  .field input::placeholder{ color: var(--ink-600); letter-spacing:0.02em; }
+  .field input:focus{ outline:none; border-color: var(--teal); }
+
+  /* CTA ---------------------------------------------------------------- */
+  .cta{
+    width:100%;
+    margin-top: 22px;
+    padding: 16px 20px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--coral) 0%, var(--coral-soft) 45%, var(--amber) 100%);
+    color: #17130E;
+    font-family: var(--font-display);
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:0.01em;
+    cursor:pointer;
+    transition: filter .15s ease, transform .15s ease, opacity .15s ease;
+    box-shadow: 0 10px 24px -10px rgba(238,90,78,0.45);
+  }
+  .cta:hover:not(:disabled){ filter: brightness(1.06); transform: translateY(-1px); }
+  .cta:active:not(:disabled){ transform: translateY(0); }
+  .cta:disabled{ opacity:.4; cursor:not-allowed; box-shadow:none; }
+
+  .btn-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 22px; }
+  .btn{
+    flex:1 1 auto;
+    padding: 13px 18px;
+    border-radius: 11px;
+    font-family: var(--font-display);
+    font-weight:700;
+    font-size:13.5px;
+    cursor:pointer;
+    border:none;
+    text-align:center;
+    transition: filter .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .btn-primary{
+    background: linear-gradient(90deg, var(--coral) 0%, var(--coral-soft) 45%, var(--amber) 100%);
+    color:#17130E;
+  }
+  .btn-primary:hover{ filter: brightness(1.06); }
+  .btn-ghost{
+    background: transparent;
+    border: 1px solid var(--navy-700);
+    color: var(--ink-300);
+  }
+  .btn-ghost:hover{ border-color: var(--teal); color: var(--ink-100); }
+
+  .link-btn{
+    background:none; border:none; padding:0;
+    font-family: var(--font-mono);
+    font-size:11px; letter-spacing:0.08em; text-transform:uppercase;
+    color: var(--ink-500); cursor:pointer; white-space:nowrap;
+  }
+  .link-btn:hover{ color: var(--teal); }
+
+  /* disclosure / footer ------------------------------------------------ */
+  .disclosure{
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--navy-700);
+    font-size: 12px;
+    line-height:1.6;
+    color: var(--ink-500);
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:16px;
+  }
+  .disclosure code{
+    font-family: var(--font-mono);
+    background: var(--navy-950);
+    border: 1px solid var(--navy-700);
+    color: var(--ink-300);
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-size: 11.5px;
+  }
+  footer{
+    text-align:center;
+    margin-top: 22px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing:0.08em;
+    color: var(--ink-600);
+    text-transform:uppercase;
+  }
+
+  /* progress ------------------------------------------------------------ */
+  #progress{ display:none; }
+  .track{
+    height:4px;
+    border-radius:2px;
+    background: rgba(255,255,255,0.06);
+    overflow:hidden;
+    margin-bottom: 18px;
+  }
+  .track i{
+    display:block; height:100%; width:34%;
+    background: linear-gradient(90deg, var(--coral), var(--amber), var(--teal));
+    border-radius:2px;
+    animation: sweep 1.5s ease-in-out infinite;
+  }
+  @keyframes sweep{ 0%{ margin-left:-34%; } 100%{ margin-left:100%; } }
+
+  .stage-name{ font-family: var(--font-display); font-size:17px; font-weight:600; }
+  .stage-meta{
+    font-family: var(--font-mono);
+    font-size:11.5px; color: var(--ink-500); margin-top:7px;
+  }
+  .steps{ margin-top:20px; display:grid; gap:9px; }
+  .step{
+    display:flex; align-items:center; gap:10px;
+    font-size:13px; color: var(--ink-600);
+    transition: color .2s ease;
+  }
+  .step .dot{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--navy-700); flex-shrink:0;
+    transition: background .2s ease, box-shadow .2s ease;
+  }
+  .step.active{ color: var(--ink-100); }
+  .step.active .dot{ background: var(--teal); box-shadow:0 0 0 3px rgba(53,190,187,0.18); }
+  .step.done{ color: var(--ink-500); }
+  .step.done .dot{ background: var(--teal); }
+
+  /* result --------------------------------------------------------------- */
+  #result{ display:none; }
+
+  .verdict{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:20px; flex-wrap:wrap;
+  }
+  .verdict h2{
+    font-family: var(--font-display);
+    font-size:24px; font-weight:700; margin:0;
+    letter-spacing:-0.01em; line-height:1.2;
+  }
+  .verdict .sub{
+    font-family: var(--font-mono);
+    font-size:11.5px; color: var(--ink-500); margin-top:6px;
+  }
+  .scorebox{ text-align:right; white-space:nowrap; }
+  .scorebox .num{
+    font-family: var(--font-display);
+    font-size:40px; font-weight:800; line-height:1;
+  }
+  .scorebox .den{ font-size:15px; color: var(--ink-500); font-weight:600; }
+  .scorebox .band{
+    font-family: var(--font-mono);
+    font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase;
+    margin-top:7px;
+  }
+
+  .divider{ height:1px; background: var(--navy-700); margin: 26px 0; border:none; }
+
+  h3{
+    font-family: var(--font-mono);
+    font-size:10.5px; font-weight:500;
+    letter-spacing:0.16em; text-transform:uppercase;
+    color: var(--teal);
+    margin: 0 0 14px;
+  }
+
+  .scorecard{ display:grid; gap:9px; }
+  /* Fixed label column so every bar starts on the same x and the bar, not the
+     whitespace, absorbs the remaining width. */
+  .cat{ display:grid; grid-template-columns: 190px 1fr 62px; align-items:center; gap:14px; }
+  .cat .name{ font-size:13px; color: var(--ink-300); }
+  .cat .trk{ height:5px; border-radius:3px; background: rgba(255,255,255,0.07); overflow:hidden; }
+  .cat .fil{ height:5px; border-radius:3px; }
+  .cat .val{
+    font-family: var(--font-mono);
+    font-size:11.5px; text-align:right; color: var(--ink-100);
+  }
+  .cat .val span{ color: var(--ink-600); }
+  @media (max-width:600px){
+    .cat{ grid-template-columns: 118px 1fr 46px; gap:9px; }
+    .cat .name{ font-size:11.5px; }
+    .cat .val{ font-size:10.5px; }
+  }
+
+  p.body{ font-size:14.5px; line-height:1.65; color: var(--ink-300); margin:0; }
+
+  .cols{ display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  @media (max-width:700px){ .cols{ grid-template-columns:1fr; gap:24px; } }
+
+  ul.findings{ list-style:none; margin:0; padding:0; }
+  ul.findings li{
+    position:relative; padding-left:16px; margin-bottom:12px;
+    font-size:13.5px; line-height:1.6; color: var(--ink-300);
+  }
+  ul.findings li::before{
+    content:""; position:absolute; left:0; top:8px;
+    width:6px; height:6px; border-radius:50%;
+  }
+  ul.strengths li::before{ background: var(--teal); }
+  ul.concerns li::before{ background: var(--coral); }
+  .tag{ font-family: var(--font-mono); font-size:10.5px; color: var(--ink-600); }
+  .why{ color: var(--ink-500); font-style:italic; }
+
+  .plabel{
+    font-family: var(--font-mono);
+    font-size:10px; letter-spacing:0.16em; text-transform:uppercase;
+    margin: 18px 0 10px;
+  }
+  .plabel.HIGH{ color: var(--coral); }
+  .plabel.MEDIUM{ color: var(--amber); }
+  .plabel.LOW{ color: var(--ink-500); }
+  ol.recs{ margin:0; padding-left:20px; }
+  ol.recs li{
+    font-size:13.5px; line-height:1.6; color: var(--ink-300);
+    margin-bottom:10px; padding-left:4px;
+  }
+  ol.recs li::marker{ font-family: var(--font-mono); font-size:12px; color: var(--ink-500); }
+
+  .bottomline{
+    background: var(--navy-950);
+    border:1px solid var(--navy-700);
+    border-left:3px solid var(--amber);
+    border-radius:12px;
+    padding:16px 18px;
+    font-size:14px; line-height:1.65; color: var(--ink-100);
+  }
+  .bottomline b{
+    font-family: var(--font-mono);
+    font-size:10.5px; letter-spacing:0.16em; color: var(--amber);
+    display:block; margin-bottom:7px;
+  }
+
+  .mailnote{
+    margin-top:18px; padding:12px 15px; border-radius:11px;
+    font-size:12.5px; display:flex; gap:9px; align-items:center;
+    font-family: var(--font-mono); letter-spacing:0.01em;
+  }
+  .mailnote.ok{
+    background: rgba(53,190,187,0.07);
+    border:1px solid rgba(53,190,187,0.25); color: var(--teal);
+  }
+  .mailnote.warn{
+    background: rgba(243,162,42,0.07);
+    border:1px solid rgba(243,162,42,0.25); color: var(--amber);
+  }
+
+  .alert{
+    margin-top:18px; padding:14px 16px; border-radius:12px;
+    background: rgba(238,90,78,0.08);
+    border:1px solid rgba(238,90,78,0.28);
+    font-size:13.5px; line-height:1.55; color: var(--ink-100);
+  }
+  .alert .hint{ color: var(--ink-500); font-size:12.5px; margin-top:5px; }
+
+  .notes{
+    margin-top:16px; font-size:11.5px; line-height:1.6; color: var(--ink-600);
+    font-family: var(--font-mono);
+  }
+  .notes ul{ margin:6px 0 0; padding-left:16px; }
+
+  @media (max-width: 480px){
+    .card{ padding: 32px 24px 28px; }
+    .card::after{ left:24px; right:24px; }
+    h1{ font-size:23px; }
+    .scorebox{ text-align:left; }
+    .disclosure{ flex-direction:column; gap:10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stageEl">
+
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M50 6 C64 6 74 16 74 16" stroke="var(--amber)" stroke-width="11" stroke-linecap="round" fill="none"/>
+      <path d="M76 66 C76 82 63 92 63 92" stroke="var(--teal)" stroke-width="11" stroke-linecap="round" fill="none"/>
+      <path d="M24 66 C24 82 37 92 37 92" stroke="var(--coral)" stroke-width="11" stroke-linecap="round" fill="none" transform="rotate(180 50 79)"/>
+      <circle cx="50" cy="20" r="11" fill="var(--amber)"/>
+      <circle cx="78" cy="68" r="11" fill="var(--teal)"/>
+      <circle cx="22" cy="68" r="11" fill="var(--coral)"/>
+    </svg>
+    <div class="brand-word">Ten Capital<span>Network</span></div>
+  </div>
+
+  <!-- ============================ UPLOAD ============================ -->
+  <div class="card" id="uploader">
+    <div class="eyebrow">Deck Analyzer</div>
+    <h1>Pitch Deck<span class="arrow">&rarr;</span><span class="to">Investor One&#8209;Pager</span></h1>
+    <p class="lede">Upload a pitch deck and get a one-page investor review PDF &mdash; effectiveness
+      score, evidence-cited strengths, the concerns an investor would raise, and the fixes
+      that matter most. Analyzed by Claude.</p>
+
+    <label class="dropzone" id="drop" for="file" tabindex="0">
+      <div class="dropzone-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink-100)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 3v4a1 1 0 0 0 1 1h4"/>
+          <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/>
+        </svg>
+      </div>
+      <div class="dropzone-title" id="dropTitle">Drop a deck here, or click to choose</div>
+      <div class="dropzone-sub" id="dropHint"><b>.pdf</b> &middot; <b>.pptx</b> &middot; <b>.ppt</b></div>
+      <input class="file-input" type="file" id="file" accept=".pdf,.pptx,.ppt">
+    </label>
+
+    <div class="field" id="codeField" style="display:none">
+      <label for="code">Access code</label>
+      <input type="password" id="code" placeholder="Required to run an analysis" autocomplete="off">
+    </div>
+
+    <button class="cta" id="go" type="button" disabled>Generate one-pager PDF</button>
+
+    <div id="err"></div>
+
+    <div class="disclosure">
+      <div id="disclosureText">A copy of every generated one-pager is emailed automatically.</div>
+      <button class="link-btn" id="tpl" type="button" title="Download the blank report template">Template</button>
+    </div>
+  </div>
+
+  <!-- =========================== PROGRESS =========================== -->
+  <div class="card" id="progress">
+    <div class="eyebrow is-live">Analyzing</div>
+    <div class="track"><i></i></div>
+    <div class="stage-name" id="stage">Uploading&hellip;</div>
+    <div class="stage-meta" id="elapsed"></div>
+    <div class="steps" id="steps">
+      <div class="step" data-step="extract"><span class="dot"></span>Extracting slides</div>
+      <div class="step" data-step="analyze"><span class="dot"></span>Reading the deck as an investor</div>
+      <div class="step" data-step="report"><span class="dot"></span>Generating the one-page PDF</div>
+      <div class="step" data-step="email"><span class="dot"></span>Emailing the report</div>
+    </div>
+  </div>
+
+  <!-- ============================ RESULT ============================ -->
+  <div class="card" id="result"></div>
+
+  <footer>Powered by TEN Capital Network</footer>
+
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const drop = $("drop"), fileInput = $("file");
+let chosen = null, ticker = null, poller = null, started = 0, config = {};
+
+const SHORT = {
+  "Investment Thesis / Narrative": "Thesis / narrative",
+  "Problem / Solution": "Problem / solution",
+  "Market Opportunity": "Market",
+  "Traction": "Traction",
+  "Business Model / GTM": "Model / GTM",
+  "Competition / Defensibility": "Competition",
+  "Financials / Raise": "Financials / raise",
+  "Team": "Team",
+  "Presentation / Visual Quality": "Design"
+};
+
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* Brand traffic light: teal = strong, amber = moderate, coral = needs work.
+   Thresholds match the report's own assessment bands. */
+function scoreColor(score) {
+  if (score >= 75) return "var(--teal)";
+  if (score >= 55) return "var(--amber)";
+  return "var(--coral)";
+}
+
+function fmtSize(bytes) {
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
+  if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
+  return bytes + " bytes";
+}
+
+function formatsHtml() {
+  const list = config.accepted_formats || [".pdf", ".pptx", ".ppt"];
+  return list.map((f) => "<b>" + esc(f) + "</b>").join(" &middot; ") +
+         " &nbsp;&middot;&nbsp; up to " + (config.max_upload_mb || 40) + "&nbsp;MB";
+}
+
+/* ---- config: the page never hard-codes what the server enforces ------ */
+fetch("/api/config").then((r) => r.json()).then((cfg) => {
+  config = cfg;
+  $("dropHint").innerHTML = formatsHtml();
+  fileInput.setAttribute("accept", (cfg.accepted_formats || []).join(","));
+  if (cfg.access_code_required) $("codeField").style.display = "block";
+  if (cfg.email_to) {
+    $("disclosureText").innerHTML =
+      "The uploaded file is processed on the server and a copy of every generated " +
+      "one-pager is emailed to <code>" + esc(cfg.email_to) + "</code>.";
+  }
+}).catch(() => {});
+
+/* ---- file selection -------------------------------------------------- */
+drop.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+});
+["dragenter", "dragover"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("is-over"); }));
+["dragleave", "drop"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("is-over"); }));
+drop.addEventListener("drop", (e) => {
+  if (e.dataTransfer.files.length) select(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) select(fileInput.files[0]);
+});
+
+function select(f) {
+  const allowed = config.accepted_formats || [".pdf", ".pptx", ".ppt"];
+  if (!allowed.some((ext) => f.name.toLowerCase().endsWith(ext))) {
+    showError("That file type is not supported.",
+              "Choose a " + allowed.join(", ") + " file.");
+    return;
+  }
+  const cap = (config.max_upload_mb || 40) * 1048576;
+  if (f.size > cap) {
+    showError("That file is " + fmtSize(f.size) + ".",
+              "The limit is " + (config.max_upload_mb || 40) +
+              " MB. Compress the images and re-export.");
+    return;
+  }
+  chosen = f;
+  $("err").innerHTML = "";
+  drop.classList.add("has-file");
+  $("dropTitle").textContent = f.name;
+  $("dropHint").innerHTML = "<b>" + fmtSize(f.size) + "</b> &nbsp;&middot;&nbsp; click to change";
+  $("go").disabled = false;
+}
+
+function showError(msg, hint) {
+  $("err").innerHTML = '<div class="alert"><b>' + esc(msg) + "</b>" +
+    (hint ? '<div class="hint">' + esc(hint) + "</div>" : "") + "</div>";
+}
+
+/* ---- submit ---------------------------------------------------------- */
+$("tpl").addEventListener("click", () => { window.location = "/api/template.pdf"; });
+
+$("go").addEventListener("click", async () => {
+  if (!chosen) return;
+  $("go").disabled = true;
+  $("err").innerHTML = "";
+  $("result").style.display = "none";
+  $("progress").style.display = "block";
+  $("stage").textContent = "Uploading…";
+  markStep("extract");
+  started = Date.now();
+  ticker = setInterval(tick, 1000);
+  tick();
+
+  const form = new FormData();
+  form.append("file", chosen);
+  if ($("code").value) form.append("access_code", $("code").value);
+
+  try {
+    const res = await fetch("/api/review", { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) { fail(data.error, data.hint); return; }
+    poll(data.id);
+  } catch (e) {
+    fail("Could not reach the server.", "Check your connection and try again.");
+  }
+});
+
+function tick() {
+  const s = Math.floor((Date.now() - started) / 1000);
+  $("elapsed").textContent =
+    String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0") +
+    "  ·  a full review usually takes one to three minutes";
+}
+
+const STEP_ORDER = ["extract", "analyze", "report", "email"];
+function markStep(current) {
+  const at = STEP_ORDER.indexOf(current);
+  document.querySelectorAll(".step").forEach((el) => {
+    const i = STEP_ORDER.indexOf(el.dataset.step);
+    el.classList.toggle("active", i === at);
+    el.classList.toggle("done", i < at);
+  });
+}
+
+function stepFromStage(stage) {
+  const s = (stage || "").toLowerCase();
+  if (s.indexOf("extract") >= 0) return "extract";
+  if (s.indexOf("analyz") >= 0) return "analyze";
+  if (s.indexOf("generat") >= 0) return "report";
+  if (s.indexOf("email") >= 0) return "email";
+  return null;
+}
+
+function poll(id) {
+  poller = setInterval(async () => {
+    try {
+      const res = await fetch("/api/jobs/" + id);
+      const job = await res.json();
+      if (!res.ok) { fail(job.error, job.hint); return; }
+      $("stage").textContent = job.stage + "…";
+      const step = stepFromStage(job.stage);
+      if (step) markStep(step);
+      if (job.status === "done") { stop(); render(job); }
+      else if (job.status === "failed") { fail(job.error, job.hint); }
+    } catch (e) { /* transient network blip: keep polling */ }
+  }, 2000);
+}
+
+function stop() {
+  clearInterval(poller); clearInterval(ticker);
+  $("progress").style.display = "none";
+  $("go").disabled = false;
+}
+
+function fail(msg, hint) {
+  stop();
+  showError(msg || "The review failed.", hint);
+  $("uploader").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+/* ---- result ---------------------------------------------------------- */
+function render(job) {
+  const r = job.review;
+  const meta = [r.sector, r.stage, r.slide_count + " slides"].filter(Boolean).join("  ·  ");
+  const colour = scoreColor(r.presentation_score);
+
+  let h =
+    '<div class="eyebrow">Review complete</div>' +
+    '<div class="verdict"><div>' +
+      "<h2>" + esc(r.company) + "</h2>" +
+      '<div class="sub">' + esc(meta) + "</div>" +
+    '</div><div class="scorebox">' +
+      '<div class="num" style="color:' + colour + '">' + r.presentation_score +
+        '<span class="den"> / 100</span></div>' +
+      '<div class="band" style="color:' + colour + '">' + esc(r.overall_assessment) + "</div>" +
+    "</div></div>";
+
+  if (r.category_scores && r.category_scores.length) {
+    h += '<hr class="divider"><h3>Category scorecard</h3><div class="scorecard">' +
+      r.category_scores.map((c) =>
+        '<div class="cat"><div class="name">' + esc(SHORT[c.category] || c.category) + "</div>" +
+        '<div class="trk"><div class="fil" style="width:' + c.score + "%;background:" +
+          scoreColor(c.score) + '"></div></div>' +
+        '<div class="val">' + Math.round(c.score) +
+          ' <span>(' + c.weight + ")</span></div></div>").join("") + "</div>";
+  }
+
+  if (r.investment_thesis) {
+    h += '<hr class="divider"><h3>Investment thesis</h3>' +
+         '<p class="body">' + esc(r.investment_thesis) + "</p>";
+  }
+
+  h += '<hr class="divider"><div class="cols">' +
+       "<div><h3>Key strengths</h3>" + findings(r.strengths, "strengths") + "</div>" +
+       "<div><h3>Key investor concerns</h3>" + findings(r.weaknesses, "concerns") + "</div>" +
+       "</div>";
+
+  const recs = r.priority_improvements || [];
+  if (recs.length) {
+    h += '<hr class="divider"><h3>Priority improvements</h3>';
+    let n = 1;
+    ["HIGH", "MEDIUM", "LOW"].forEach((p) => {
+      const items = recs.filter((x) => x.priority === p);
+      if (!items.length) return;
+      h += '<div class="plabel ' + p + '">' + p + "</div>" +
+           '<ol class="recs" start="' + n + '">';
+      items.forEach((i) => {
+        h += "<li>" + esc(i.text) +
+             (i.rationale ? ' <span class="why">' + esc(i.rationale) + "</span>" : "") + "</li>";
+        n++;
+      });
+      h += "</ol>";
+    });
+  }
+
+  if (r.presentation_analysis) {
+    h += '<hr class="divider"><h3>Presentation &amp; storytelling</h3>' +
+         '<p class="body">' + esc(r.presentation_analysis) + "</p>";
+  }
+
+  if (r.bottom_line) {
+    h += '<hr class="divider"><div class="bottomline"><b>Bottom line</b>' +
+         esc(r.bottom_line) + "</div>";
+  }
+
+  h += '<div class="btn-row">' +
+    '<button class="btn btn-primary" data-href="' + job.downloads.pdf +
+      '">Download one-page PDF</button>' +
+    '<button class="btn btn-ghost" data-href="' + job.downloads.json +
+      '">Download JSON</button>' +
+    '<button class="btn btn-ghost" id="again">Analyze another deck</button></div>';
+
+  if (job.email) {
+    h += '<div class="mailnote ' + (job.email.sent ? "ok" : "warn") + '">' +
+         (job.email.sent ? "✓" : "!") + " " + esc(job.email.summary || "") + "</div>";
+  }
+
+  const notes = (r.warnings || []).concat((r.extraction || {}).warnings || []);
+  if (notes.length) {
+    h += '<div class="notes">Notes<ul>' +
+         notes.slice(0, 6).map((w) => "<li>" + esc(w) + "</li>").join("") + "</ul></div>";
+  }
+
+  $("result").innerHTML = h;
+  $("result").style.display = "block";
+  $("stageEl").classList.add("wide");
+
+  $("result").querySelectorAll("[data-href]").forEach((b) => {
+    b.addEventListener("click", () => { window.location = b.dataset.href; });
+  });
+  const again = $("again");
+  if (again) again.addEventListener("click", reset);
+
+  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function findings(list, kind) {
+  if (!list || !list.length) {
+    return '<p class="body" style="color:var(--ink-600)">None identified.</p>';
+  }
+  return '<ul class="findings ' + kind + '">' + list.map((f) => {
+    let s = "<li>" + esc(f.text);
+    if (f.slides && f.slides.length)
+      s += ' <span class="tag">[s' + f.slides.join(",") + "]</span>";
+    if (f.evidence && f.evidence !== "FOUND IN DECK")
+      s += ' <span class="tag">[' + esc(f.evidence.toLowerCase()) + "]</span>";
+    if (f.why_investors_care)
+      s += ' <span class="why">' + esc(f.why_investors_care) + "</span>";
+    return s + "</li>";
+  }).join("") + "</ul>";
+}
+
+function reset() {
+  chosen = null;
+  fileInput.value = "";
+  drop.classList.remove("has-file");
+  $("dropTitle").textContent = "Drop a deck here, or click to choose";
+  $("dropHint").innerHTML = formatsHtml();
+  $("go").disabled = true;
+  $("result").style.display = "none";
+  $("stageEl").classList.remove("wide");
+  $("uploader").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+</script>
+
+</body>
+</html>

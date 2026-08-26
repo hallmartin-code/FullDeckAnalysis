@@ -1,0 +1,28 @@
+# Document extraction
+pymupdf>=1.24            # primary PDF text, font metrics and image counts
+pdfplumber>=0.11         # PDF table extraction and text fallback
+python-pptx>=0.6.23      # PowerPoint (.pptx) extraction
+Pillow>=10.0             # image handling used by python-pptx
+
+# Report generation
+reportlab>=4.0           # default one-page PDF engine (no system dependencies)
+
+# LLM providers (install at least one, or run with --provider heuristic)
+anthropic>=0.40          # default provider
+openai>=1.40             # alternative provider
+
+# Configuration
+python-dotenv>=1.0       # loads API keys from a .env file
+
+# Optional: HTML/CSS -> PDF engine, enabled with --engine html.
+# WeasyPrint needs system GTK/Pango libraries and is awkward on Windows.
+jinja2>=3.1
+# weasyprint>=62
+
+# Web app (Railway deployment)
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9      # multipart/form-data file uploads
+
+# Email notifications (Resend)
+requests>=2.31

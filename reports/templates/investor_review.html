@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ r.company }} — Investor Presentation Review</title>
+<style>
+  @page {
+    size: Letter portrait;
+    margin: 0.5in 0.5in 0.62in 0.5in;
+    @bottom-left {
+      content: "{{ footer }}";
+      font: 6.2pt/8pt Helvetica, Arial, sans-serif;
+      color: #6B7280;
+    }
+    @bottom-right {
+      content: "Page 1 of 1";
+      font: 6.2pt/8pt Helvetica, Arial, sans-serif;
+      color: #6B7280;
+    }
+  }
+
+  :root {
+    --ink: #141821;
+    --body: #2B313D;
+    --muted: #6B7280;
+    --rule: #C9CDD4;
+    --hair: #E6E8EC;
+    --accent: #1F3A5F;
+    --high: #9E2B25;
+    --medium: #9A6510;
+    --low: #4B5563;
+    --panel: #F4F5F7;
+    --size: {{ cfg.body_size }}pt;
+    --leading: {{ cfg.body_leading }}pt;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: var(--size)/var(--leading) Helvetica, Arial, sans-serif;
+    color: var(--body);
+    -weasy-hyphens: auto;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 17pt;
+    line-height: 19pt;
+    letter-spacing: -0.2pt;
+    color: var(--ink);
+    text-transform: uppercase;
+  }
+  .kicker { margin-top: 2pt; font-size: 7.4pt; color: var(--muted); }
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; }
+  .score { text-align: right; white-space: nowrap; }
+  .score .value { font-size: 21pt; font-weight: bold; color: var(--accent); }
+  .score .max { font-size: 10pt; color: var(--accent); }
+  .score .band { font-size: 7.2pt; color: var(--muted); text-transform: uppercase; }
+
+  hr {
+    border: none;
+    border-top: 0.6pt solid var(--rule);
+    margin: 6pt 0 5pt;
+  }
+  hr.strong { border-top: 1.1pt solid var(--accent); margin: 5pt 0 6pt; }
+
+  h2 {
+    margin: 0 0 3.4pt;
+    font-size: 8.4pt;
+    line-height: 10pt;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.3pt;
+  }
+
+  .scorecard { display: flex; gap: 6pt; }
+  .cat { flex: 1; }
+  .cat .label {
+    font-size: 5.1pt; font-weight: bold; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.2pt;
+  }
+  .cat .track { height: 3.4pt; background: var(--hair); margin: 2pt 0; }
+  .cat .fill { height: 3.4pt; }
+  .cat .val { font-size: 5.6pt; color: var(--body); }
+
+  .cols { display: flex; gap: 16pt; }
+  .cols > div { flex: 1; }
+  .cols > div + div { border-left: 0.5pt solid var(--hair); padding-left: 8pt; }
+
+  ul { margin: 0; padding: 0; list-style: none; }
+  li { margin-bottom: 2.6pt; padding-left: 8.5pt; text-indent: -8.5pt; }
+  li::before { content: "– "; }
+
+  .tag { color: #8A9099; font-size: calc(var(--size) - 1.4pt); }
+  .why { color: var(--muted); font-style: italic; }
+
+  .plabel { font-size: 6.8pt; font-weight: bold; margin: 1.5pt 0 2pt; }
+  .plabel.HIGH { color: var(--high); }
+  .plabel.MEDIUM { color: var(--medium); }
+  .plabel.LOW { color: var(--low); }
+  ol { margin: 0; padding-left: 13pt; }
+  ol li { padding-left: 0; text-indent: 0; }
+  ol li::before { content: none; }
+  ol li::marker { font-weight: bold; }
+
+  p { margin: 0; text-align: justify; }
+
+  .bottom {
+    background: var(--panel);
+    border-left: 2.2pt solid var(--accent);
+    padding: 6pt 8pt;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>{{ r.company }}</h1>
+    <div class="kicker">Investor Presentation Review &nbsp;·&nbsp; {{ meta }}</div>
+  </div>
+  <div class="score">
+    <span class="value">{{ r.presentation_score }}</span><span class="max"> / 100</span>
+    <div class="band">{{ r.overall_assessment }}</div>
+  </div>
+</header>
+
+<hr class="strong">
+
+{% if cfg.show_bars and r.category_scores %}
+<div class="scorecard">
+  {% for c in r.category_scores %}
+  <div class="cat">
+    <div class="label">{{ short_labels.get(c.category, c.category[:9]) }}</div>
+    <div class="track"><div class="fill"
+      style="width: {{ c.score }}%; background: {{ bar_color(c.score) }};"></div></div>
+    <div class="val">{{ '%.0f'|format(c.score) }} ({{ c.weight }} pts)</div>
+  </div>
+  {% endfor %}
+</div>
+<hr>
+{% endif %}
+
+{% if r.investment_thesis %}
+<h2>Investment Thesis</h2>
+<p>{{ r.investment_thesis|shorten(cfg.thesis_chars) }}</p>
+<hr>
+{% endif %}
+
+<div class="cols">
+  <div>
+    <h2>Key Strengths</h2>
+    <ul>
+      {% for f in r.strengths[:cfg.strengths] %}
+      <li>{{ f.text|shorten(cfg.finding_chars) }}{{ tags(f, cfg) }}</li>
+      {% else %}
+      <li><i>No evidence-based strengths identified.</i></li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div>
+    <h2>Key Investor Concerns</h2>
+    <ul>
+      {% for f in r.weaknesses[:cfg.concerns] %}
+      <li>{{ f.text|shorten(cfg.finding_chars) }}{{ tags(f, cfg) }}</li>
+      {% else %}
+      <li><i>No material concerns identified.</i></li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+<hr>
+
+{% if groups %}
+<h2>Priority Improvements</h2>
+{% set counter = namespace(n=0) %}
+{% for priority, items in groups %}
+<div class="plabel {{ priority }}">{{ priority }}</div>
+<ol start="{{ counter.n + 1 }}">
+  {% for item in items %}
+  {% set counter.n = counter.n + 1 %}
+  <li>{{ item.text|shorten(cfg.rec_chars) }}{% if cfg.show_rationale and item.rationale %}
+    <span class="why">{{ item.rationale|shorten(100) }}</span>{% endif %}</li>
+  {% endfor %}
+</ol>
+{% endfor %}
+<hr>
+{% endif %}
+
+<div class="cols">
+  <div>
+    <h2>Presentation &amp; Storytelling</h2>
+    <p>{{ r.presentation_analysis|shorten(cfg.analysis_chars) or "Not assessed." }}</p>
+  </div>
+  {% if cfg.show_flow %}
+  <div>
+    <h2>Recommended Flow</h2>
+    <p>{{ flow_text }}</p>
+  </div>
+  {% endif %}
+</div>
+<hr>
+
+{% if r.bottom_line %}
+<div class="bottom"><b>BOTTOM LINE&nbsp;&nbsp;</b>{{ r.bottom_line|shorten(cfg.bottom_chars) }}</div>
+{% endif %}
+
+</body>
+</html>
