@@ -28,6 +28,33 @@ DEFAULT_OPENAI_MODEL = "gpt-4o"
 MAX_TOKENS = 64_000
 
 
+def parse_json_reply(text: str) -> Dict[str, Any]:
+    """Parse a model reply that should be one JSON object.
+
+    Tolerates the wrappers models occasionally add despite structured output: a
+    markdown code fence, or a sentence before or after the object. Raises
+    ``ValueError`` when no JSON object can be recovered.
+    """
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else ""
+        if cleaned.rstrip().endswith("```"):
+            cleaned = cleaned.rstrip()[:-3]
+        cleaned = cleaned.strip()
+    if not cleaned:
+        raise ValueError("the reply was empty")
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        if start == -1 or end <= start:
+            raise ValueError(str(exc)) from exc
+        try:
+            return json.loads(cleaned[start:end + 1])
+        except json.JSONDecodeError as inner:
+            raise ValueError(str(inner)) from inner
+
+
 def is_degenerate(raw: Any) -> bool:
     """True when a model response is unusable rather than merely critical.
 
@@ -106,12 +133,23 @@ class AnthropicProvider(LLMProvider):
         }
 
         # Schema-constrained decoding occasionally collapses into a repetition loop
-        # that fills the response with duplicate or empty entries. One retry clears it.
-        raw = None
+        # that fills the response with duplicate or empty entries, or returns a reply
+        # that is not JSON at all. One retry clears either.
+        parse_error = None
         for attempt in (1, 2):
-            raw = self._one_attempt(request)
+            try:
+                raw = self._one_attempt(request)
+            except ValueError as exc:
+                parse_error = exc
+                continue
             if not is_degenerate(raw):
                 return raw
+        if parse_error is not None:
+            raise AnalysisError(
+                "The model reply could not be read as JSON twice ({}).".format(parse_error),
+                "Retry the run; this is usually transient. Use --provider heuristic "
+                "for an offline review.",
+            )
         raise AnalysisError(
             "The model returned an unusable review twice (empty or repeated content).",
             "Retry the run, or use --provider heuristic for an offline review.",
@@ -129,19 +167,8 @@ class AnthropicProvider(LLMProvider):
                 "Try again, or run with --provider heuristic for an offline review.",
             )
 
-        text = self._first_text(message)
-        if not text:
-            raise AnalysisError(
-                "The model returned no text content.",
-                "Retry, or run with --provider heuristic.",
-            )
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise AnalysisError(
-                "The model response was not valid JSON: {}".format(exc),
-                "Retry the run; this is usually transient.",
-            ) from exc
+        # Raises ValueError on an empty or non-JSON reply; analyze_deck retries it.
+        return parse_json_reply(self._reply_text(message))
 
     # -- transport ---------------------------------------------------------- #
 
@@ -207,11 +234,12 @@ class AnthropicProvider(LLMProvider):
         )
 
     @staticmethod
-    def _first_text(message) -> str:
-        for block in getattr(message, "content", []) or []:
-            if getattr(block, "type", None) == "text":
-                return block.text
-        return ""
+    def _reply_text(message) -> str:
+        """All text blocks joined: the JSON is not always in the first one."""
+        return "".join(
+            block.text for block in getattr(message, "content", []) or []
+            if getattr(block, "type", None) == "text"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -262,10 +290,11 @@ class OpenAIProvider(LLMProvider):
 
         content = response.choices[0].message.content or ""
         try:
-            return json.loads(content)
-        except json.JSONDecodeError as exc:
+            return parse_json_reply(content)
+        except ValueError as exc:
             raise AnalysisError(
-                "The model response was not valid JSON: {}".format(exc)
+                "The model response was not valid JSON: {}".format(exc),
+                "Retry the run; this is usually transient.",
             ) from exc
 
 

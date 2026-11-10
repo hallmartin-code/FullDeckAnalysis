@@ -24,10 +24,13 @@ from analysis.llm_provider import (  # noqa: E402
     HeuristicProvider,
     LLMProvider,
     get_provider,
+    AnthropicProvider,
     is_degenerate,
+    parse_json_reply,
 )
 from analysis.scoring import WEIGHTS, heuristic_category_scores, reconcile, total_score  # noqa: E402
 from extractors import extract_deck  # noqa: E402
+from utils.validation import AnalysisError  # noqa: E402
 from models.schemas import (  # noqa: E402
     CategoryScore,
     ExtractedDeck,
@@ -638,6 +641,66 @@ def test_cli_reports_unsupported_file_cleanly(tmp_path, capsys):
     bad.write_text("nope")
     assert app.main([str(bad), "--output", str(tmp_path)]) == 2
     assert "Error" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("reply", [
+    '{"company": "Acme"}',
+    '  \n{"company": "Acme"}\n',
+    '```json\n{"company": "Acme"}\n```',
+    'Here is the review:\n{"company": "Acme"}\nLet me know.',
+])
+def test_parse_json_reply_recovers_wrapped_json(reply):
+    assert parse_json_reply(reply) == {"company": "Acme"}
+
+
+@pytest.mark.parametrize("reply", ["", "   ", "```json\n```", "no json here"])
+def test_parse_json_reply_rejects_unusable_replies(reply):
+    with pytest.raises(ValueError):
+        parse_json_reply(reply)
+
+
+class _Block:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+
+class _Message:
+    stop_reason = "end_turn"
+
+    def __init__(self, *texts):
+        self.content = [_Block(t) for t in texts]
+
+
+def _stub_anthropic(monkeypatch, replies):
+    from analysis import llm_provider
+
+    monkeypatch.setattr(llm_provider.prompts, "build_user_prompt", lambda deck, profile: "")
+    provider = AnthropicProvider.__new__(AnthropicProvider)
+    provider.model = "test-model"
+    queue = iter(replies)
+    provider._send = lambda request: next(queue)
+    return provider
+
+
+def test_anthropic_retries_a_reply_that_is_not_json(monkeypatch):
+    good = {"strengths": [{"text": "a"}], "weaknesses": [], "priority_improvements": []}
+    provider = _stub_anthropic(monkeypatch, [_Message(""), _Message(json.dumps(good))])
+    assert provider.analyze_deck(None, None) == good
+
+
+def test_anthropic_reads_json_split_across_text_blocks(monkeypatch):
+    good = {"strengths": [{"text": "a"}], "weaknesses": [], "priority_improvements": []}
+    text = json.dumps(good)
+    provider = _stub_anthropic(monkeypatch, [_Message("", text[:10], text[10:])])
+    assert provider.analyze_deck(None, None) == good
+
+
+def test_anthropic_reports_two_unreadable_replies(monkeypatch):
+    provider = _stub_anthropic(monkeypatch, [_Message(""), _Message("not json")])
+    with pytest.raises(AnalysisError, match="could not be read as JSON"):
+        provider.analyze_deck(None, None)
 
 
 if __name__ == "__main__":
